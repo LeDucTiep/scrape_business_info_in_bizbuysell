@@ -44,15 +44,15 @@ def crawl_link(driver, industry):
         pass
 
     try:
-        temp = driver.execute_script(
+        all_tags = driver.execute_script(
             "return document.getElementsByClassName('listing-container')[0].children")
     except:
         return
 
-    for i in temp:
+    for tag in all_tags:
         try:
-            cmd = "insert into data(link, [Listing type], industry) values ('"+i.find_element(
-                By.TAG_NAME, "a").get_attribute('href')+"', '"+Listing_type+"', '"+industry+"')"
+            url = tag.find_element(By.TAG_NAME, "a").get_attribute('href')
+            cmd = "insert into data(link, [Listing type], industry) values ('"+url+"', '"+Listing_type+"', '"+industry+"')"
             with sqlite3.connect(DATABASE_PATH) as conn:
                 conn.execute(cmd)
                 conn.commit()
@@ -132,7 +132,6 @@ def get_all_link(driver, Established_business, Startups, Asset_sales):
         click_industries_button(driver)
         # except:
         #     close_dialog()
-
         # try:
         close_dialog()
         click_for_more_industries(driver)
@@ -143,16 +142,18 @@ def get_all_link(driver, Established_business, Startups, Asset_sales):
         driver.execute_script(
             "document.getElementsByClassName('btn filter cta inverse cancel')[0].click()")
         time.sleep(1)
-        # get data from elements
+        # click industry type
         industries_tag = driver.find_elements(By.TAG_NAME, "td")
-        industries_length = len(industries_tag)
         industries_tag[index_of_industries].click()
+
+        industries_length = len(industries_tag)
         industry = industries_tag[index_of_industries].text
         time.sleep(1)
         close_dialog()
         # Click "apply"
         driver.execute_script(
             "document.getElementsByClassName('btn filter cta')[0].click()")
+
         close_dialog()
 
         click_industries_button(driver)
@@ -165,7 +166,9 @@ def get_all_link(driver, Established_business, Startups, Asset_sales):
                 "window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(0.5)
             close_dialog()
+
             crawl_link(driver, industry)
+
             page += 1
             try:
                 close_dialog()
@@ -173,6 +176,7 @@ def get_all_link(driver, Established_business, Startups, Asset_sales):
                 # next page by click the "next" button
                 WebDriverWait(driver, 20).until(
                     EC.element_to_be_clickable((By.CSS_SELECTOR, "a.bbsPager_next.ng-star-inserted"))).click()
+
                 # driver.execute_script("document.getElementsByClassName('bbsPager_next ng-star-inserted')[0].click()")
             except Exception as e:
                 if(str(e).find("properties of undefined")):
