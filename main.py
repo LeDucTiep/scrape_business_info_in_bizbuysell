@@ -2,6 +2,7 @@ import multiprocessing
 import random
 import sqlite3
 import time
+import os
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.firefox.service import Service
@@ -11,22 +12,24 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.firefox import GeckoDriverManager
 
+# create your own github token when this GH_TOKEN is gone
+# https://github.com/SergeyPirogov/webdriver_manager#gh_token
+os.environ['GH_TOKEN'] = "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"
+
 DATABASE_PATH = "database.db"
 
 # it will open 4 browsers for scraping data in the second page
 HOW_MANY_THREAD_DO_YOU_NEED = 4
 
-# LINK_CHROMEDRIVER = "/media/tiepl/New Volume/crawl_freelancer/chromedriver"
-# LINK_CHROMEDRIVER = r"chromedriver.exe"
 
 Listing_type = ''
 
 
 def initDriver(IS_HEADLESS=False) -> webdriver:
     options = Options()
-    options.add_argument("--disable-blink-features")
+    # options.add_argument("--disable-blink-features")
     options.add_argument("--start-maximized")
-    options.add_argument("--disable-blink-features=AutomationControlled")
+    # options.add_argument("--disable-blink-features=AutomationControlled")
     options.headless = IS_HEADLESS
     # set to 2: disable loading image
     # set to 1: enable ...
