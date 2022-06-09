@@ -1,9 +1,9 @@
 import multiprocessing
-import random
 import sqlite3
 import time
 import os
 from bs4 import BeautifulSoup
+import requests
 from selenium import webdriver
 from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.firefox.options import Options
@@ -14,202 +14,15 @@ from webdriver_manager.firefox import GeckoDriverManager
 
 # create your own github token when this GH_TOKEN is gone
 # https://github.com/SergeyPirogov/webdriver_manager#gh_token
-os.environ['GH_TOKEN'] = "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"
+os.environ['GH_TOKEN'] = "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"
 
 DATABASE_PATH = "database.db"
 
 # it will open 4 browsers for scraping data in the second page
-HOW_MANY_THREAD_DO_YOU_NEED = 4
+HOW_MANY_THREAD_DO_YOU_NEED = 20
 
 
-Listing_type = ''
-
-
-def initDriver(IS_HEADLESS=False) -> webdriver:
-    options = Options()
-    # options.add_argument("--disable-blink-features")
-    options.add_argument("--start-maximized")
-    # options.add_argument("--disable-blink-features=AutomationControlled")
-    options.headless = IS_HEADLESS
-    # set to 2: disable loading image
-    # set to 1: enable ...
-    options.set_preference(
-        "permissions.default.image", 2)
-    return webdriver.Firefox(service=Service(GeckoDriverManager().install()), options=options)
-
-
-def crawl_link(driver, industry):
-    global Listing_type
-    try:
-        WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "h3.title.ng-star-inserted")))
-    except:
-        pass
-
-    try:
-        all_tags = driver.execute_script(
-            "return document.getElementsByClassName('listing-container')[0].children")
-    except:
-        return
-
-    for tag in all_tags:
-        try:
-            url = tag.find_element(By.TAG_NAME, "a").get_attribute('href')
-            cmd = "insert into data(link, [Listing type], industry) values ('"+url+"', '"+Listing_type+"', '"+industry+"')"
-            with sqlite3.connect(DATABASE_PATH) as conn:
-                conn.execute(cmd)
-                conn.commit()
-        except:
-            pass
-
-
-def close_dialog():
-    click_no_thank(driver)
-    click_close_menu(driver)
-
-
-def wait_until_Listing_type_displayed(driver):
-    try:
-        WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "a.franchise-op")))
-    except:
-        pass
-
-def click_listing_type_button(driver):
-    try:
-        driver.execute_script(
-        "document.getElementsByClassName('btn filter-bar listing-types-button listing-type')[0].click()")
-    except:pass
-
-def click_industries_button(driver):
-    try:
-        WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.ID, "hlSelectCategories"))).click()
-    except:
-        pass
-
-
-def click_for_more_industries(driver):
-    try:
-        WebDriverWait(driver, 5).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "div.all-industries-option.ng-tns-c6-3.ng-star-inserted"))).click()
-    except:
-        click_industries_button(driver)
-        click_for_more_industries(driver)
-
-
-def get_all_link(driver, Established_business, Startups, Asset_sales):
-    global Listing_type
-    driver.get(r'https://www.bizbuysell.com/businesses-for-sale/')
-
-    # click listing-types-button
-    click_listing_type_button(driver)
-    wait_until_Listing_type_displayed(driver)
-
-    # click "Established business,..." box
-    if(Established_business):
-        Listing_type += "Established business, "
-        driver.execute_script(
-            'document.getElementsByTagName("input")[0].click()')
-    if(Asset_sales):
-        Listing_type += "Asset sales, "
-        driver.execute_script(
-            'document.getElementsByTagName("input")[1].click()')
-    if(Startups):
-        Listing_type += "Startups, "
-        driver.execute_script(
-            'document.getElementsByTagName("input")[3].click()')
-    
-    # "Established business, Startups" = "Established business, Startups, " (https://www.w3schools.com/python/python_strings_slicing.asp)
-    Listing_type = Listing_type[:-2]
-
-    click_listing_type_button(driver)
-
-    industries_length = 19
-    for index_of_industries in range(industries_length):
-        close_dialog()
-        # try:
-        driver.execute_script(
-            "window.scrollTo(0, 0);")
-        close_dialog()
-        click_industries_button(driver)
-        # except:
-        #     close_dialog()
-        # try:
-        close_dialog()
-        click_for_more_industries(driver)
-        time.sleep(1)
-        close_dialog()
-
-        # clear all button clicked
-        driver.execute_script(
-            "document.getElementsByClassName('btn filter cta inverse cancel')[0].click()")
-        time.sleep(1)
-        # click industry type
-        industries_tag = driver.find_elements(By.TAG_NAME, "td")
-        industries_tag[index_of_industries].click()
-
-        industries_length = len(industries_tag)
-        industry = industries_tag[index_of_industries].text
-        time.sleep(1)
-        close_dialog()
-        # Click "apply"
-        driver.execute_script(
-            "document.getElementsByClassName('btn filter cta')[0].click()")
-
-        close_dialog()
-
-        click_industries_button(driver)
-        time.sleep(5)
-        page = 1
-        while(page < 201):
-            driver.execute_script(
-                "window.scrollTo(0, document.body.scrollHeight);")
-            driver.execute_script(
-                "window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(0.5)
-            close_dialog()
-
-            crawl_link(driver, industry)
-
-            page += 1
-            try:
-                close_dialog()
-
-                # next page by click the "next" button
-                WebDriverWait(driver, 20).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, "a.bbsPager_next.ng-star-inserted"))).click()
-
-                # driver.execute_script("document.getElementsByClassName('bbsPager_next ng-star-inserted')[0].click()")
-            except Exception as e:
-                if(str(e).find("properties of undefined")):
-                    page = 999
-
-
-def click_no_thank(driver):
-    try:
-        driver.find_element(By.CSS_SELECTOR, "button.btn.nt").click()
-    except:
-        pass
-
-
-def click_close_menu(driver):
-    try:
-        driver.execute_script(
-            "document.getElementsByClassName('close-menu close-chip')[0].click()")
-    except:
-        pass
-
-
-def get_values(driver, title):
-    for i in range(len(driver.find_elements(By.CLASS_NAME, "title"))):
-        text = driver.find_elements(By.CLASS_NAME, "title")[i].text.lower()
-        if(text.find(title.lower()) != -1):
-            return driver.find_elements(By.CLASS_NAME, "title")[i].find_element(By.XPATH, "..").find_element(By.TAG_NAME, "b").text
-    return 'NULL'
-
-
-def push_to_database(listing_type, name, location, industry, asking_price, revenue, cash_flow, ebitda, established):
+def push_to_database(listing_type, name, location, industry, asking_price, revenue, cash_flow, ebitda, established) -> None:
     try:
         cmd = '''insert into results  ([Listing type] ,
                 Name,
@@ -219,77 +32,18 @@ def push_to_database(listing_type, name, location, industry, asking_price, reven
                 Revenue,
                 [Cash flow],
                 EBITDA,
-                [Established date]) values  (\'''' + str(listing_type) + "\', \'"+str(name)+"\', \'"+str(location)+"\', \'"+str(industry)+"\', \'"+str(asking_price)+"\', \'"+str(revenue)+"\', \'"+str(cash_flow)+"\', \'"+str(ebitda)+"\', \'"+str(established)+"\')"
+                [Established date]) values  (\'''' + str(listing_type).replace('\r', '').replace("'", "''") + "\', \'"+str(name).replace('\r', '').replace("'", "''")+"\', \'"+str(location).replace('\r', '').replace("'", "''")+"\', \'"+str(industry).replace('\r', '').replace("'", "''")+"\', \'"+str(asking_price).replace('\r', '').replace("'", "''")+"\', \'"+str(revenue).replace('\r', '').replace("'", "''")+"\', \'"+str(cash_flow).replace('\r', '').replace("'", "''")+"\', \'"+str(ebitda).replace('\r', '').replace("'", "''")+"\', \'"+str(established).replace('\r', '').replace("'", "''")+"\')"
         with sqlite3.connect(DATABASE_PATH) as conn:
             conn.execute(cmd)
             conn.commit()
-    except:
-        pass
-
-
-def crawl_data(driver, url, listing_type, industry):
-    try:
-        driver.get(url)
-    except:
-        return
-    try:
-        WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.ID, "hlWatchListing")))
-    except:
-        pass
-
-    try:
-        name = driver.find_element(By.TAG_NAME, 'h1').text
-        location = driver.find_element(By.CSS_SELECTOR, 'h2.gray').text
-        asking_price = get_values(driver, 'Asking Price:')
-        revenue = get_values(driver, 'Revenue')
-        cash_flow = get_values(driver, 'Cash flow')
-        ebitda = get_values(driver, 'EBITDA')
-        established = get_values(driver, 'Established')
-        push_to_database(listing_type, name, location, industry,
-                         asking_price, revenue, cash_flow, ebitda, established)
-    except:
-        return
-
-
-def crawl_data_with_soup(driver, url, listing_type, industry):
-    try:
-        driver.get("view-source:"+url)
-        soup = BeautifulSoup(driver.find_element(
-            By.TAG_NAME, "html").text, 'html.parser')
-    except:
-        return
-
-    try:
-        name = soup.find("h1").text.replace("\n", "").replace("  ", "")
-        location = soup.select_one('h2.gray').text.replace(
-            "\n", "").replace("  ", "")
-        asking_price = get_values(soup, 'Asking Price:')
-        revenue = get_values(soup, 'Revenue')
-        cash_flow = get_values(soup, 'Cash flow')
-        ebitda = get_values(soup, 'EBITDA')
-        established = get_values(soup, 'Established')
-    except:
-        return
-    conti = 1
-    while(conti):
-        try:
+    except Exception as e:
+        if(str(e).find("UNIQUE") != -1):
+            pass
+        else:
+            print(str(e))
+            time.sleep(1)
             push_to_database(listing_type, name, location, industry,
                              asking_price, revenue, cash_flow, ebitda, established)
-            conti = 0
-        except Exception as e:
-            print(str(e))
-            if(str(e).find("database is locked") == -1):
-                return
-            print("Disconnected with database!")
-            time.sleep(2)
-
-
-def delete_second_link(l):
-    cmd = "DELETE FROM data where link = '"+str(l)+"'"
-    with sqlite3.connect(DATABASE_PATH) as conn:
-        conn.execute(cmd)
-        conn.commit()
 
 
 def get_records_left_in_database():
@@ -306,19 +60,6 @@ def get_records_left_in_database():
     return True
 
 
-def crawl(driver, second_links):
-    try:
-        link = second_links[random.randint(0, len(second_links))]
-
-        crawl_data_with_soup(driver, link[0], link[1], link[2])
-        # delete this "link to second page" in database
-        this_link_is_used(link[0])
-        # 
-        second_links.remove(link)
-    except:
-        pass
-
-
 def this_link_is_used(l):
     cmd = "update data set status = 1 where link = '"+str(l)+"'"
     conti = 1
@@ -326,6 +67,7 @@ def this_link_is_used(l):
         try:
             with sqlite3.connect(DATABASE_PATH) as conn:
                 conn.execute(cmd)
+                conn.commit()
             conti = 0
         except Exception as e:
             print(str(e))
@@ -333,55 +75,326 @@ def this_link_is_used(l):
                 return
             print("Disconnected with database!")
             time.sleep(2)
-    conn.commit()
 
 
-def process():
-    cmd = "SELECT link, [Listing type], industry FROM data where status = 0;"
-    with sqlite3.connect(DATABASE_PATH) as conn:
-        cursor = conn.execute(cmd)
-        conn.commit()
-    second_links = []
-    for i in cursor:
-        second_links.append(i)
+class FirstPage:
+    def initDriver(self, IS_HEADLESS=False) -> webdriver:
+        options = Options()
+        # options.add_argument("--disable-blink-features")
+        options.add_argument("--start-maximized")
+        # options.add_argument("--disable-blink-features=AutomationControlled")
+        options.headless = IS_HEADLESS
+        # set to 2: disable loading image
+        # set to 1: enable ...
+        options.set_preference(
+            "permissions.default.image", 2)
+        self.driver = webdriver.Firefox(service=Service(
+            GeckoDriverManager(path="./geckodriver").install()), options=options)
 
-    driver = initDriver()
-    # range(HOW_MANY_THREAD_DO_YOU_NEED)
+    def crawl_link(self, industry):
+        try:
+            WebDriverWait(self.driver, 20).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "h3.title.ng-star-inserted")))
+        except:
+            pass
 
-    while(get_records_left_in_database()):
-        crawl(driver, second_links)
-    input("Successful!")
+        try:
+            all_tags = self.driver.execute_script(
+                "return document.getElementsByClassName('listing-container')[0].children")
+        except:
+            return
 
+        for tag in all_tags:
+            try:
+                url = tag.find_element(By.TAG_NAME, "a").get_attribute('href')
+                cmd = "insert into data(link, [Listing type], industry) values ('" + \
+                    url+"', '"+self.Listing_type+"', '"+industry+"')"
+                with sqlite3.connect(DATABASE_PATH) as conn:
+                    conn.execute(cmd)
+                    conn.commit()
+            except:
+                pass
 
-def crawl_with_beautifulSoup():
-    myDictionary = {}
-    for i in range(HOW_MANY_THREAD_DO_YOU_NEED):
-        myDictionary[i] = multiprocessing.Process(target=process, args=())
+    def close_dialog(self):
+        self.click_no_thank()
+        self.click_close_menu()
 
-    for i in range(HOW_MANY_THREAD_DO_YOU_NEED):
-        # starting process
-        myDictionary[i].start()
+    def wait_until_Listing_type_displayed(self):
+        try:
+            WebDriverWait(self.driver, 20).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "a.franchise-op")))
+        except:
+            pass
 
-    for i in range(HOW_MANY_THREAD_DO_YOU_NEED):
-        # wait until process is finished
-        myDictionary[i].join()
+    def click_listing_type_button(self):
+        try:
+            self.driver.execute_script(
+                "document.getElementsByClassName('btn filter-bar listing-types-button listing-type')[0].click()")
+        except:
+            pass
+
+    def click_industries_button(self):
+        try:
+            WebDriverWait(self.driver, 20).until(
+                EC.element_to_be_clickable((By.ID, "hlSelectCategories"))).click()
+        except:
+            pass
+
+    def click_for_more_industries(self):
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "div.all-industries-option.ng-tns-c6-3.ng-star-inserted"))).click()
+        except:
+            self.click_industries_button()
+            self.click_for_more_industries()
+
+    def get_all_link(self, Established_business, Startups, Asset_sales):
+        Listing_type = ''
+        self.driver.get(r'https://www.bizbuysell.com/businesses-for-sale/')
+
+        # click listing-types-button
+        self.click_listing_type_button()
+        self.wait_until_Listing_type_displayed()
+
+        # click "Established business,..." box
+        if(Established_business):
+            Listing_type += "Established business, "
+            self.driver.execute_script(
+                'document.getElementsByTagName("input")[0].click()')
+        if(Asset_sales):
+            Listing_type += "Asset sales, "
+            self.driver.execute_script(
+                'document.getElementsByTagName("input")[1].click()')
+        if(Startups):
+            Listing_type += "Startups, "
+            self.driver.execute_script(
+                'document.getElementsByTagName("input")[3].click()')
+
+        # "Established business, Startups" = "Established business, Startups, " (https://www.w3schools.com/python/python_strings_slicing.asp)
+        Listing_type = Listing_type[:-2]
+
+        self.click_listing_type_button()
+
+        industries_length = 19
+        for index_of_industries in range(industries_length):
+            self.close_dialog()
+            # try:
+            self.driver.execute_script(
+                "window.scrollTo(0, 0);")
+            self.close_dialog()
+            self.click_industries_button()
+            # except:
+            #     self.close_dialog()
+            # try:
+            self.close_dialog()
+            self.click_for_more_industries()
+            time.sleep(1)
+            self.close_dialog()
+
+            # clear all button clicked
+            self.driver.execute_script(
+                "document.getElementsByClassName('btn filter cta inverse cancel')[0].click()")
+            time.sleep(1)
+            # click industry type
+            industries_tag = self.driver.find_elements(By.TAG_NAME, "td")
+            industries_tag[index_of_industries].click()
+
+            industries_length = len(industries_tag)
+            industry = industries_tag[index_of_industries].text
+            time.sleep(1)
+            self.close_dialog()
+            # Click "apply"
+            self.driver.execute_script(
+                "document.getElementsByClassName('btn filter cta')[0].click()")
+
+            self.close_dialog()
+
+            self.click_industries_button()
+            time.sleep(5)
+            page = 1
+            while(page < 201):
+                self.driver.execute_script(
+                    "window.scrollTo(0, document.body.scrollHeight);")
+                self.driver.execute_script(
+                    "window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(0.5)
+                self.close_dialog()
+
+                self.crawl_link(industry)
+
+                page += 1
+                try:
+                    self.close_dialog()
+
+                    # next page by click the "next" button
+                    WebDriverWait(self.driver, 20).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, "a.bbsPager_next.ng-star-inserted"))).click()
+
+                    # driver.execute_script("document.getElementsByClassName('bbsPager_next ng-star-inserted')[0].click()")
+                except Exception as e:
+                    if(str(e).find("properties of undefined")):
+                        page = 999
+
+    def click_no_thank(self):
+        try:
+            self.driver.find_element(By.CSS_SELECTOR, "button.btn.nt").click()
+        except:
+            pass
+
+    def click_close_menu(self):
+        try:
+            self.driver.execute_script(
+                "document.getElementsByClassName('close-menu close-chip')[0].click()")
+        except:
+            pass
+
+    def get_values(self, title):
+        for i in range(len(self.driver.find_elements(By.CLASS_NAME, "title"))):
+            text = self.driver.find_elements(By.CLASS_NAME, "title")[i].text.lower()
+            if(text.find(title.lower()) != -1):
+                return self.driver.find_elements(By.CLASS_NAME, "title")[i].find_element(By.XPATH, "..").find_element(By.TAG_NAME, "b").text
+        return 'NULL'
+
+    def crawl_data(self, url, listing_type, industry):
+        try:
+            self.driver.get(url)
+        except:
+            return
+        try:
+            WebDriverWait(self.driver, 20).until(
+                EC.element_to_be_clickable((By.ID, "hlWatchListing")))
+        except:
+            pass
+
+        try:
+            name = self.driver.find_element(By.TAG_NAME, 'h1').text
+            location = self.driver.find_element(
+                By.CSS_SELECTOR, 'h2.gray').text
+            asking_price = self.get_values('Asking Price:')
+            revenue = self.get_values('Revenue')
+            cash_flow = self.get_values('Cash flow')
+            ebitda = self.get_values('EBITDA')
+            established = self.get_values('Established')
+            push_to_database(listing_type, name, location, industry,
+                             asking_price, revenue, cash_flow, ebitda, established)
+        except:
+            return
+
+    def quit(self):
+        self.driver.quit()
+class SecondPage:
+    def crawl(self, link) -> None:
+        try:
+            if(link == None):
+                return None
+            self.crawl_data_with_soup(link[0], link[1], link[2])
+        except:
+            pass
+
+    def get_values(self, soup, title):
+        title_tags = soup.select('span.title')
+        for i in range(len(title_tags)):
+            text = title_tags[i].text.lower()
+            if(text.find(title.lower()) != -1):
+                return title_tags[i].parent.find('b').text.replace("\n", "").replace("  ", "")
+        return 'NULL'
+
+    def crawl_data_with_soup(self, url, listing_type, industry):
+        try:
+            headers = {
+                "User-Agent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36'}
+            r = requests.get(url, headers=headers)
+            page = r.content
+            soup = BeautifulSoup(page, 'html.parser')
+        except:
+            return
+        if(soup.get_text() == '' or soup.get_text().find('Access Denied') != -1):
+            print("Blocked!")
+            return
+        try:
+            name = soup.find("h1").text.replace("\n", "").replace("  ", "")
+            location = soup.select_one('h2.gray').text.replace(
+                "\n", "").replace("  ", "")
+            asking_price = self.get_values(soup, 'Asking Price:')
+            revenue = self.get_values(soup, 'Revenue')
+            cash_flow = self.get_values(soup, 'Cash flow')
+            ebitda = self.get_values(soup, 'EBITDA')
+            established = self.get_values(soup, 'Established')
+        except:
+            # with open('error.html', 'w', encoding='utf-8') as f:
+            #     f.write(soup.prettify())
+            # print("error!")
+            return
+        conti = 1
+        while(conti):
+            try:
+                push_to_database(listing_type, name, location, industry,
+                                 asking_price, revenue, cash_flow, ebitda, established)
+                conti = 0
+            except Exception as e:
+                print(str(e))
+                if(str(e).find("database is locked") == -1):
+                    return
+                print("Disconnected with database!")
+                time.sleep(2)
+
+    def get_records_left_in_database(self):
+        cmd = "SELECT count(*) FROM data where status = 0;"
+        with sqlite3.connect("database.db") as conn:
+            cursor = conn.execute(cmd)
+            conn.commit()
+        for i in cursor:
+            result = i[0]
+            break
+        print(result, " records left.")
+        if(result == 0):
+            return False
+        return True
+
+    def crawl_with_beautifulSoup(self):
+        myDictionary = {}
+        count_thread = 0
+        while(self.get_records_left_in_database()):
+            cmd = "SELECT link, [Listing type], industry FROM data where status = 0 limit 1;"
+            with sqlite3.connect("database.db") as conn:
+                cursor = conn.execute(cmd)
+                conn.commit()
+            for i in cursor:
+                link = i
+                break
+            this_link_is_used(link[0])
+
+            myDictionary[count_thread] = multiprocessing.Process(
+                target=self.crawl, args=(link,))
+
+            # starting process
+            myDictionary[count_thread].start()
+
+            count_thread += 1
+
+            if(len(myDictionary) == HOW_MANY_THREAD_DO_YOU_NEED):
+                for d in myDictionary:
+                    # wait until process is finished
+                    myDictionary[d].join()
+                myDictionary = {}
 
 
 if __name__ == '__main__':
-    driver = initDriver()
+    first_page = FirstPage()
+    first_page.initDriver()
     # crawl links to second pages
     for i in ((1, 0, 0), (0, 1, 0), (0, 0, 1)):
-        get_all_link(driver, i[0], i[1], i[2])
+        first_page.get_all_link(i[0], i[1], i[2])
+    first_page.quit()
     # crawl data in second pages
-    crawl_with_beautifulSoup()
-
+    SecondPage().crawl_with_beautifulSoup()
     input("Successful!")
 
     # 1. open browser and scrape all links to second pages
     # - open browser
     # - go to the website
     # - chose some options
-    # - repeat: get all links 
+    # - repeat: get all links
     #           save all links into database
     #           click next page
     #   end: all options are chosen
